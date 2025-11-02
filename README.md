@@ -2,6 +2,16 @@
 
 A cli tool that acts like an application for your database schemas management using SQLModel orm.
 
+## Installation
+
+Using uv:
+
+    uv tool install https://github.com/gh-PonyM/shed.git
+
+Using pipx:
+
+    pipx install git+https://github.com/gh-PonyM/shed.git#main
+
 ## Usage
 
 Create a new project inside the projects folder:
