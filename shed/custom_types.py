@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 import click
 import typer
 from pydantic import PostgresDsn
-from schemi.settings import (
+from shed.settings import (
     DatabaseConfig,
     SqliteConnection,
     PostgresConnection,

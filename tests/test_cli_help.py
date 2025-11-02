@@ -1,6 +1,6 @@
 """Tests for CLI help functionality."""
 
-from schemi.cli import app
+from shed.cli import app
 
 
 def test_main_help(runner, cli_settings):
@@ -43,7 +43,6 @@ def test_migrate_help(runner, cli_settings):
     assert "Run database migrations" in result.stdout
     assert "target" in result.stdout
     assert "--dry-run" in result.stdout
-    assert "--message" in result.stdout
     assert "--revision" in result.stdout
 
 

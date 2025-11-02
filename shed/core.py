@@ -174,7 +174,7 @@ def run_alembic(cmd: list[str], project_cfg: ProjectConfig, db_config: DatabaseC
         create_alembic_temp_files(tmp, project_cfg.module, project_cfg.versions_dir)
         # Run alembic revision command
         cmd = ["alembic", "-c", str(tmp / "alembic.ini"), *cmd]
-        os.environ["SCHEMI_CURRENT_DSN"] = db_config.connection.get_dsn
+        os.environ["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
         result = subprocess.run(
             cmd,
             capture_output=True,

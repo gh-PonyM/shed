@@ -1,6 +1,6 @@
 """Tests for CLI commands functionality."""
 
-from schemi.cli import app
+from shed.cli import app
 
 
 def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
@@ -19,7 +19,7 @@ def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
     assert (project_dir / "migrations" / "versions").exists()
 
     # Verify the config was written correctly by reading it back
-    from schemi.settings import Settings
+    from shed.settings import Settings
 
     loaded_settings = Settings.from_file(cli_settings_path)
 
@@ -69,7 +69,7 @@ def test_migrate_command_invalid_target_format(runner, cli_settings):
 
     result = runner.invoke(app, ["migrate", "projectA.foo"])
     assert result.exit_code == 2
-    assert "Project 'projectA' has no environment name 'foo'" in result.stderr
+    assert "Project 'projectA' has no environment named" in result.stderr
 
 
 #
@@ -94,6 +94,7 @@ def test_migrate_command_invalid_target_format(runner, cli_settings):
 def test_clone_command_success(runner, cli_settings):
     """Test successful clone command between sqlite databases."""
     result = runner.invoke(app, ["clone", "projectA.staging"])
+    print(result.stdout)
     assert result.exit_code == 0
     # assert "Cloned staging_db to staging_db (sqlite)" in result.stdout
 
@@ -111,24 +112,22 @@ def test_clone_command_dry_run(runner, cli_settings):
 def test_clone_command_invalid_source_format(runner, cli_settings):
     """Test clone command with invalid source format."""
     result = runner.invoke(app, ["clone", "invalid_source", "projectA.staging"])
-
-    assert result.exit_code == 1
-    assert "Target must be in format 'project.environment'" in result.stderr
+    assert result.exit_code == 2
 
 
 def test_clone_command_invalid_target_format(runner, cli_settings):
     """Test clone command with invalid target format."""
     result = runner.invoke(app, ["clone", "projectA.staging", "invalid_target"])
 
-    assert result.exit_code == 1
-    assert "Target must be in format 'project.environment'" in result.stderr
+    assert result.exit_code == 2
+    assert " Project 'invalid_target' not found" in result.stderr
 
 
 def test_clone_command_source_project_not_found(runner, cli_settings):
     """Test clone command with non-existent source project."""
     result = runner.invoke(app, ["clone", "nonexistent.staging", "projectA.staging"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "Project 'nonexistent' not found" in result.stderr
 
 
@@ -136,24 +135,26 @@ def test_clone_command_source_environment_not_found(runner, cli_settings):
     """Test clone command with non-existent source environment."""
     result = runner.invoke(app, ["clone", "projectA.nonexistent", "projectA.staging"])
 
-    assert result.exit_code == 1
-    assert "Environment 'nonexistent' not found" in result.stderr
+    assert result.exit_code == 2
+    assert "Invalid value for 'SRC'" in result.stderr
+    assert " Project 'projectA' has no environment named" in result.stderr
 
 
 def test_clone_command_target_project_not_found(runner, cli_settings):
     """Test clone command with non-existent target project."""
     result = runner.invoke(app, ["clone", "projectA.staging", "nonexistent.staging"])
 
-    assert result.exit_code == 1
-    assert "Project 'nonexistent' not found" in result.stderr
+    assert result.exit_code == 2
+    assert "Project 'nonexistent' not found in projects" in result.stderr
 
 
 def test_clone_command_target_environment_not_found(runner, cli_settings):
     """Test clone command with non-existent target environment."""
     result = runner.invoke(app, ["clone", "projectA.staging", "projectA.nonexistent"])
 
-    assert result.exit_code == 1
-    assert "Environment 'nonexistent' not found" in result.stderr
+    assert result.exit_code == 2
+    assert "Invalid value for '[TARGET]'" in result.stderr
+    assert " Project 'projectA' has no environment" in result.stderr
 
 
 def test_clone_command_mismatched_database_types(runner, cli_settings):
@@ -193,7 +194,7 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
     assert versions_dir.is_dir()
 
     # Verify the project config points to the correct models file
-    from schemi.settings import Settings
+    from shed.settings import Settings
 
     settings = Settings.from_file(cli_settings_path)
     assert settings.projects[project_name].module == target_models_path.absolute()

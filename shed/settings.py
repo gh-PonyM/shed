@@ -7,7 +7,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, PrivateAttr
 from urllib.parse import quote_plus
 
-from schemi.constants import DEFAULT_SETTINGS_FN
+from shed.constants import DEFAULT_SETTINGS_FN
 
 DBType = Literal["sqlite", "postgres"]
 

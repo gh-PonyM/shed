@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-from schemi.settings import (
+from shed.settings import (
     DatabaseConfig,
     Settings,
     SqliteConnection,

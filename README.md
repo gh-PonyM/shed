@@ -1,4 +1,4 @@
-# schemi
+# shed
 
 A cli tool that acts like an application for your database schemas management using SQLModel orm.
 
@@ -6,7 +6,7 @@ A cli tool that acts like an application for your database schemas management us
 
 Create a new project inside the projects folder:
 
-    schemi init news_agg -o projects -c postgres://user:pw@localhost:5432/db_name --env lab
+    shed init news_agg -o projects -c postgres://user:pw@localhost:5432/db_name --env lab
 
 This will create the following folder structure:
 

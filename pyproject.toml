@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "schemi"
+name = "shed"
 version = "0.1.0"
 description = "A command line tool for managing database schemas and migrations"
 authors = [
@@ -29,18 +29,18 @@ dependencies = [
 ]
 
 [project.scripts]
-schemi = "schemi.cli:app"
+shed = "shed.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/gh-PonyM/schemi"
-Repository = "https://github.com/gh-PonyM/schemi"
+Homepage = "https://github.com/gh-PonyM/shed"
+Repository = "https://github.com/gh-PonyM/shed"
 
 [tool.hatch.build.targets.wheel]
-packages = ["schemi"]
+packages = ["shed"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/schemi",
+    "/shed",
     "/tests",
     "/README.md",
     "/pyproject.toml",
@@ -49,7 +49,7 @@ include = [
 [tool.ruff]
 target-version = "py310"
 line-length = 88
-exclude = ["schemi/templates"]
+exclude = ["shed/templates"]
 lint.ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults

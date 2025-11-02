@@ -20,10 +20,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 def get_dsn_from_env():
-    """Get DSN from SCHEMI_CURRENT_DSN environment variable."""
-    dsn = os.getenv("SCHEMI_CURRENT_DSN")
+    """Get DSN from SHED_CURRENT_DSN environment variable."""
+    dsn = os.getenv("SHED_CURRENT_DSN")
     if not dsn:
-        raise ValueError("SCHEMI_CURRENT_DSN environment variable is not set")
+        raise ValueError("SHED_CURRENT_DSN environment variable is not set")
     return dsn
 
 def run_migrations_offline() -> None:

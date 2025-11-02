@@ -74,7 +74,7 @@ Thumbs.db
 *.sqlite
 *.db
 migrations/versions/
-.schemi_settings.yaml
+.shed_settings.yaml
 
 # Temporary files
 *.tmp
@@ -87,4 +87,4 @@ migrations/versions/
 .aider*
 
 # config
-schemi_settings.yml
+shed_settings.yml

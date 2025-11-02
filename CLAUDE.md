@@ -21,7 +21,7 @@ A command line cli wrapper around alembic with a custom yaml config file.
 - typer as cli tool
 - pydantic for config validation
 
-The code itself should be a package that can be installed later. it is called schemi.
+The code itself should be a package that can be installed later. it is called shed.
 
 ## Development Commands
 
@@ -29,29 +29,29 @@ ruff for linting, pytest for testing. Just add some documentation to the README.
 
 ## Cli commands
 
-The base cli entrypoint should be schemi. 
+The base cli entrypoint should be shed. 
 
 ## Cli subcommands
 
 Be able to bootstrap a migrations folder in the current repo.
 
-    schemi init
+    shed init
 
 Like alembic, but creating the mako 
 
 Beeing able to run migrations, for example:
 
-    schemi migrate <project.<name>> --dry-run
+    shed migrate <project.<name>> --dry-run
 
 Please add options that are also required by alembic.
 
 Clone command should support the clone from one into another db, only allowing to clone to the same type (postgres, sqlite). Under the hood, it can use linux terminal commands such as pgdump. For sqlite, a copy of the db (if possible, check that it is synced and not locked).
 
-    schemi clone <source> <target>
+    shed clone <source> <target>
 
 Creatin revisions using alembic:
 
-   schemi revision -m "message" --autogenerate
+   shed revision -m "message" --autogenerate
 
 ## Proposed settings format
 

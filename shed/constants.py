@@ -1,0 +1,4 @@
+PROG_NAME = "shed"
+SETTINGS_PATH_ENV_VAR = "SHED_SETTINGS_PATH"
+DEFAULT_SETTINGS_FN = "shed_settings.yml"
+DEFAULT_DEV_DB_NAME = "dev.sqlite"

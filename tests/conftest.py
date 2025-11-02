@@ -6,8 +6,8 @@ from traceback import print_tb
 import pytest
 from typer.testing import CliRunner as BaseCliRunner
 
-from schemi.constants import SETTINGS_PATH_ENV_VAR
-from schemi.settings import Settings
+from shed.constants import SETTINGS_PATH_ENV_VAR
+from shed.settings import Settings
 
 
 class CliRunner(BaseCliRunner):
@@ -57,7 +57,7 @@ def sample_settings_data(temp_settings_dir):
                 "projectA": {
                     "type": "sqlite",
                     "connection": {
-                        "db_path": str(temp_settings_dir / "schemi-dev.sqlite")
+                        "db_path": str(temp_settings_dir / "shed-dev.sqlite")
                     },
                 },
                 "pglocal": {

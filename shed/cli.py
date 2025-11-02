@@ -4,7 +4,7 @@ from typing import Annotated
 from pathlib import Path
 import typer
 
-from schemi.custom_types import (
+from shed.custom_types import (
     DBConnection,
     parse_connection,
     ProjectEnvironment,
@@ -164,13 +164,14 @@ def clone(
     settings = ctx.obj["settings"]
     if not target:
         # use dev db
-        target = settings.development.db.get(src.project_name)
-    if not target:
-        error(f"No database found for project {src.project_name}")
-        raise typer.Exit(1)
-
-    validate_matching_db_types(src.db_config, target.db_config)
-    result = clone_database(src.db_config, target.db_config, dry_run)
+        target_db_cfg = settings.development.db.get(src.project_name)
+        if not target_db_cfg:
+            error(f"No database found for project {src.project_name}")
+            raise typer.Exit(1)
+    else:
+        target_db_cfg = target.db_config
+    validate_matching_db_types(src.db_config, target_db_cfg)
+    result = clone_database(src.db_config, target_db_cfg, dry_run)
 
     if result.success:
         success(result.message)
@@ -216,7 +217,7 @@ def alembic(
 ):
     """
     Run raw alembic commands for a given project environment.
-    Usage: schemi alembic project.env -h
+    Usage: shed alembic project.env -h
     """
     project_config = target.project_config
     db_config = target.db_config
