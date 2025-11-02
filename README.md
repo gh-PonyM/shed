@@ -1,6 +1,15 @@
 # shed
 
-A cli tool that acts like an application for your database schemas management using SQLModel orm.
+Are you doing some ETL project, you don't want to manage your database schema with **raw SQL**, and maybe validate 
+data from external tools using those schemas e.g. when using LLM output? Then this tool might help you.
+
+`shed` is a cli tool that acts like an application for your database schemas management using `SQLModel` orm and manages 
+them for you using `alembic`. You get free json-schema export for all your `pydantic.BaselModel` (**v2**). 
+
+## Use Cases
+
+- You can create your database models git repo that only manages db models, using `shed` to manage db and schemas
+- You can add `shed` as tool into an existing python project and add migration files to it, following the folder structure proposed below.
 
 ## Installation
 
@@ -75,4 +84,4 @@ version_locations = {versions_dir}
 
 As you can see, the folder containing the version python files can be specified as well as the script location 
 where `env.py` and `script.py.mako` is expected to be found. Using a generated `alembic.ini`, `env.py` and `script.py.mako`,
-we have less to think of as developer / data engineer.
+we have hassle creating those files for every project we need to manage data as developer / data engineer.
