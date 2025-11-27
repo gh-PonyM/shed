@@ -1,6 +1,9 @@
 """Tests for CLI commands functionality."""
 
+from pathlib import Path
+
 from shed.cli import app
+from shed.settings import Settings
 
 
 def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
@@ -26,7 +29,7 @@ def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
     # Check that projectA was added to the configuration
     assert "projectA" in loaded_settings.projects
     project_config = loaded_settings.projects["projectA"]
-    assert project_config.module == temp_settings_dir / "projectA" / "models.py"
+    assert project_config.module == Path("projectA/models.py")
     assert project_config.db == {}  # Should be empty dict for new project
 
 
@@ -183,7 +186,7 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
     # Copy the test models.py to the temp directory
     import shutil
 
-    shutil.copy2(source_models_path, project_dir / "models.py")
+    shutil.copy2(source_models_path, target_models_path)
 
     # First, initialize a project with the output directory
     result = runner.invoke(
@@ -197,7 +200,11 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
     from shed.settings import Settings
 
     settings = Settings.from_file(cli_settings_path)
-    assert settings.projects[project_name].module == target_models_path.absolute()
+    models_p = settings.projects[project_name].module
+    assert not models_p.is_absolute()
+    assert (
+        settings.settings_path.parent / models_p
+    ).absolute() == target_models_path.absolute()
 
     # Create a revision using in memory sqlite db
     result = runner.invoke(
@@ -218,3 +225,40 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
         assert "Initial migration" in content
         assert "def upgrade()" in content
         assert "def downgrade()" in content
+
+
+def test_revision_command_relative_paths(
+    temp_dir_runner, cli_settings_path, temp_settings_dir
+):
+    """Test successful revision command using relative paths and runner changing directory to temp path as pwd"""
+
+    project_name = "testproject"
+    env = "homelab"
+    out = "projects"
+
+    # Relative path to db
+    rel_db_conn = "sqlite:///test.sqlite"
+    assert not cli_settings_path.is_file()
+    r = temp_dir_runner.invoke(
+        app,
+        ["init", project_name, "-o", out, "--env", env, "-c", rel_db_conn],
+        catch_exceptions=True,
+    )
+    assert r.exit_code == 0, r.stdout
+    assert cli_settings_path.is_file()
+    s = Settings.from_file(cli_settings_path)
+    print(s.model_dump_json(indent=2))
+    conn = s.projects[project_name].db[env].connection
+    assert conn.get_dsn == rel_db_conn
+    models_p = s.projects[project_name].module
+    assert not models_p.is_absolute(), "The models path should not be absolute"
+
+    # Empty revision for development db
+    r = temp_dir_runner.invoke(app, ["revision", project_name], catch_exceptions=True)
+    assert r.exit_code == 0, r.stdout
+
+    # Empty revision for environment db also sqlite but given with relative connection string
+    r = temp_dir_runner.invoke(
+        app, ["revision", f"{project_name}.{env}"], catch_exceptions=True
+    )
+    assert r.exit_code == 0, r.stdout

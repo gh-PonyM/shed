@@ -1,4 +1,5 @@
 import contextlib
+import os
 import tempfile
 from pathlib import Path
 from typing import NamedTuple, Any, Callable, Generator
@@ -7,6 +8,7 @@ import inspect
 from functools import lru_cache
 import shutil
 
+import typer
 from pydantic import BaseModel
 from sqlmodel import SQLModel
 
@@ -70,13 +72,21 @@ def init_project(
     """Initialize migration folder for a project, creating project config if needed."""
     config_created = False
 
-    # Check if project exists, if not create it
-    if output_dir:
-        project_dir = output_dir.resolve() / project_name
-    else:
-        project_dir = Path.cwd().resolve() / project_name
+    # Check if project exists, if not create it, use relative paths to the settings
+    s_p = settings.settings_path.parent.resolve()
+    if not output_dir:
+        output_dir = s_p
+    project_dir = (output_dir / project_name).resolve()
 
+    try:
+        project_rel_path = project_dir.relative_to(s_p)
+    except ValueError:
+        typer.secho(f"Project '{project_dir}' is not a subpath of {s_p}", err=True)
+        raise typer.Exit(1)
+
+    models_rel_path = project_rel_path / "models.py"
     models_path = project_dir / "models.py"
+
     if project_name not in settings.projects:
         config_created = True
     project_config = settings.add_project(project_name, models_path)
@@ -92,7 +102,7 @@ def init_project(
             success=False,
             message=f"Migrations directory already exists at {migrations_dir}. Use --force to overwrite.",
             config_created=config_created,
-            models_path=str(project_dir),
+            models_path=str(models_rel_path),
         )
 
     # Create migrations directory structure
@@ -103,7 +113,7 @@ def init_project(
 
     message_parts = []
     if config_created:
-        message_parts.append(f"Config created in {settings._settings_path}")
+        message_parts.append(f"Config created in {settings.settings_path}")
     message_parts.append(
         f"Migration folder initialized at {migrations_dir} and development db '{dev_db}' added"
     )
@@ -166,14 +176,18 @@ def create_alembic_temp_files(tmp: Path, models_path: Path, versions_dir: Path) 
     shutil.copy2(script_template, script_template_path)
 
 
-def run_alembic(cmd: list[str], project_cfg: ProjectConfig, db_config: DatabaseConfig):
+def run_alembic(
+    cmd: list[str],
+    project_cfg: ProjectConfig,
+    db_config: DatabaseConfig,
+):
     import subprocess
-    import os
 
     with create_temp_dir() as tmp:
         create_alembic_temp_files(tmp, project_cfg.module, project_cfg.versions_dir)
         # Run alembic revision command
         cmd = ["alembic", "-c", str(tmp / "alembic.ini"), *cmd]
+        # TODO: get_dsn does not resolve with the project
         os.environ["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
         result = subprocess.run(
             cmd,

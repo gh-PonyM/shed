@@ -4,9 +4,11 @@ from pathlib import Path
 from traceback import print_tb
 
 import pytest
+import yaml
 from typer.testing import CliRunner as BaseCliRunner
 
 from shed.constants import SETTINGS_PATH_ENV_VAR
+from shed.utils import cd_to_directory
 from shed.settings import Settings
 
 
@@ -42,9 +44,8 @@ def cli_settings_path(temp_settings_dir, monkeypatch):
 def cli_settings(cli_settings_path, monkeypatch, sample_settings_data):
     """Create settings for CLI testing with environment variable set."""
     # Return loaded settings instance
-    s = Settings(**sample_settings_data)
-    s._settings_path = cli_settings_path
-    s.save()
+    cli_settings_path.write_text(yaml.safe_dump(sample_settings_data))
+    s = Settings.from_file(cli_settings_path)
     return s
 
 
@@ -102,3 +103,10 @@ def sample_settings_data(temp_settings_dir):
 def runner():
     """Create CLI test runner."""
     return CliRunner()
+
+
+@pytest.fixture
+def temp_dir_runner(temp_settings_dir):
+    """Create CLI test runner."""
+    with cd_to_directory(temp_settings_dir):
+        yield CliRunner()

@@ -92,7 +92,11 @@ def init(
     ] = False,
     output: Annotated[
         Path | None,
-        typer.Option("--output", "-o", help="Output directory for project files"),
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output directory for project files. If not set, will be the same as the config file",
+        ),
     ] = None,
     dev_db_type: Annotated[
         CliDBType, typer.Option(help="Database used local development")

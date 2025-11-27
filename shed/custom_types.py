@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import NamedTuple
-from urllib.parse import urlparse
 
 import click
 import typer
@@ -15,15 +14,17 @@ from shed.settings import (
 
 
 def parse_connection(value: str) -> "DBConnection":
-    parsed = urlparse(value)
-    if parsed.scheme == "sqlite":
-        if not parsed.path:
+    from sqlalchemy.engine.url import make_url
+
+    parsed = make_url(value)
+    if parsed.drivername == "sqlite":
+        if not parsed.database:
             raise typer.BadParameter("SQLite URI must include a path")
         cfg = DatabaseConfig(
-            type="sqlite", connection=SqliteConnection(db_path=Path(parsed.path))
+            type="sqlite", connection=SqliteConnection(db_path=Path(parsed.database))
         )
 
-    elif parsed.scheme in {"postgresql", "postgres"}:
+    elif parsed.drivername in {"postgresql", "postgres"}:
         try:
             dsn = PostgresDsn(value)
             host = dsn.hosts()[0]
@@ -41,7 +42,7 @@ def parse_connection(value: str) -> "DBConnection":
         )
     else:
         raise typer.BadParameter(
-            f"Unsupported scheme '{parsed.scheme}'. Only sqlite and postgresql/postgres are supported."
+            f"Unsupported scheme '{parsed.drivername}'. Only sqlite and postgresql/postgres are supported."
         )
     return DBConnection(cfg)
 

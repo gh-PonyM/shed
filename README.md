@@ -27,6 +27,10 @@ Create a new project inside the projects folder:
 
     shed init news_agg -o projects -c postgres://user:pw@localhost:5432/db_name --env lab
 
+Or using a sqlite database:
+
+    shed init news_agg -o projects -c sqlite:///projects/domteur.sqlite --env dev
+
 This will create the following folder structure:
 
 ```shell

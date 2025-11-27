@@ -1,18 +1,50 @@
 """Settings models for schema management."""
 
+from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, PrivateAttr
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+    model_validator,
+    model_serializer,
+)
 from urllib.parse import quote_plus
+
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from shed.constants import DEFAULT_SETTINGS_FN
 
 DBType = Literal["sqlite", "postgres"]
+ConvertMode = Literal["abs", "rel"]
 
 
-class SqliteConnection(BaseModel):
+def convert_abs(root: Path, value: Path):
+    return value if value.is_absolute() else root / value
+
+
+def convert_rel(root: Path, value: Path):
+    return value.relative_to(root)
+
+
+def path_convert(root: Path, value: Path, mode: ConvertMode) -> Path:
+    return {"abs": partial(convert_abs, root), "rel": partial(convert_rel, root)}[mode](
+        value
+    )
+
+
+class SettingsRelPaths(BaseModel):
+    def _convert_paths(self, path: Path, mode: Literal["rel", "abs"] = "rel"):
+        for name, f_info in self.model_fields.items():
+            if f_info.annotation == Path:
+                new_val = path_convert(path, getattr(self, name), mode)
+                setattr(self, name, new_val)
+
+
+class SqliteConnection(SettingsRelPaths):
     """SQLite database connection configuration."""
 
     db_path: Path
@@ -23,7 +55,7 @@ class SqliteConnection(BaseModel):
         return f"sqlite:///{self.db_path}"
 
 
-class PostgresConnection(BaseModel):
+class PostgresConnection(SettingsRelPaths):
     """PostgreSQL database connection configuration."""
 
     host: str = "127.0.0.1"
@@ -55,10 +87,11 @@ class DatabaseConfig(BaseModel):
 
     @property
     def db_name(self):
+        # TODO: unclear type
         return getattr(self.connection, "database", self.connection.db_path)
 
 
-class ProjectConfig(BaseModel):
+class ProjectConfig(SettingsRelPaths):
     """Configuration for a specific project."""
 
     module: Path = Field(
@@ -74,6 +107,11 @@ class ProjectConfig(BaseModel):
     def migrations_dir(self):
         return self.module.parent / "migrations"
 
+    def _convert_paths(self, path: Path, mode: Literal["rel", "abs"] = "rel"):
+        super()._convert_paths(path, mode)
+        for db in self.db.values():
+            db.connection._convert_paths(path, mode)
+
 
 class DevelopmentConfig(BaseModel):
     """Development database configuration."""
@@ -85,7 +123,7 @@ class DevelopmentConfig(BaseModel):
         return {
             project_name: DatabaseConfig(
                 type="sqlite",
-                connection=SqliteConnection(db_path=f"{project_name}.sqlite"),
+                connection=SqliteConnection(db_path=Path(f"{project_name}.sqlite")),
             )
         }
 
@@ -115,9 +153,11 @@ class Settings(BaseModel):
     development: DevelopmentConfig = DevelopmentConfig()
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
 
-    _settings_path: Path | None = PrivateAttr(default_factory=default_settings_path)
+    settings_path: Path | None = None
 
     def add_project(self, project_name: str, code_path: Path) -> ProjectConfig:
+        if not code_path.is_absolute():
+            raise ValueError("code_path must be absolute")
         if project_name not in self.projects:
             self.projects[project_name] = ProjectConfig(module=code_path, db={})
         return self.projects[project_name]
@@ -127,16 +167,13 @@ class Settings(BaseModel):
         """Load settings from file."""
         if not settings_path.exists():
             # Create default settings file
-            settings = cls()
-            settings._settings_path = settings_path
+            settings = cls(settings_path=settings_path)
             settings.save()
             return settings
-
         with open(settings_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        settings = cls(**data)
-        settings._settings_path = settings_path
+        settings = cls(**data, settings_path=settings_path)
         return settings
 
     def all_code_files(self):
@@ -145,14 +182,35 @@ class Settings(BaseModel):
 
     def save(self) -> None:
         """Save settings to file."""
-        if not self._settings_path:
-            self._settings_path = self._get_settings_path()
+        if not self.settings_path:
+            self.settings_path = self._get_settings_path()
 
         # Ensure directory exists
-        self._settings_path.parent.mkdir(exist_ok=True)
+        self.settings_path.parent.mkdir(exist_ok=True)
 
         # Re-validate
-        data_dump = self.model_dump(exclude={"_settings_path"}, mode="json")
+        data_dump = self.model_dump(exclude={"settings_path"}, mode="json")
         self.__class__(**data_dump)
-        with open(self._settings_path, "w", encoding="utf-8") as f:
+        with open(self.settings_path, "w", encoding="utf-8") as f:
             yaml.dump(data_dump, f, default_flow_style=False, indent=2)
+
+    def _convert_paths(self, mode: Literal["rel", "abs"] = "rel"):
+        for proj in self.projects.values():
+            proj._convert_paths(self.settings_path.parent.absolute(), mode)
+
+    @model_serializer(mode="wrap")
+    def serialize_model(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        if not self.settings_path:
+            return handler(self)
+        a_copy = self.model_copy(deep=True)
+        a_copy._convert_paths(mode="rel")
+        serialized = handler(a_copy)
+        return serialized
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> Self:
+        if self.settings_path:
+            self._convert_paths(mode="abs")
+        return self
