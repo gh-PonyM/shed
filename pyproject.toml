@@ -7,7 +7,7 @@ name = "shed"
 version = "0.1.0"
 description = "A command line tool for managing database schemas and migrations"
 authors = [
-    {name = "Your Name", email = "dev@lksch.ch"},
+    {name = "PonyM", email = "dev@lksch.ch"},
 ]
 readme = "README.md"
 requires-python = ">=3.10"
