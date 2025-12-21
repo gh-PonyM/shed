@@ -37,6 +37,10 @@ Or using a sqlite database:
     # Use the development db for the project, remove the migrations
     shed revision news_agg
 
+Emit raw sql using wrapped `alembic` command:
+
+    shed alembic news_agg.lab upgrade head --sql
+
 This will create the following folder structure:
 
 ```shell

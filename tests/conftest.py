@@ -65,7 +65,7 @@ def sample_settings_data(temp_settings_dir):
                     "type": "postgres",
                     "connection": {
                         "host": "localhost",
-                        "port": 5432,
+                        "port": 5433,
                         "username": "dev",
                         "password": "dev_pass",
                         "database": "dev_db",

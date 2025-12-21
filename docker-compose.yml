@@ -1,0 +1,10 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev_pass
+      POSTGRES_DB: dev_db
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
