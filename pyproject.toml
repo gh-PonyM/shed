@@ -66,6 +66,7 @@ addopts = [
 
 [dependency-groups]
 dev = [
+    "psycopg2-binary>=2.9.11",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
     "ruff>=0.12.4",
