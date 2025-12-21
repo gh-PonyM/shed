@@ -1,4 +1,5 @@
 import json
+import sys
 from enum import Enum
 from typing import Annotated
 from pathlib import Path
@@ -230,7 +231,12 @@ def alembic(
     project_config = target.project_config
     db_config = target.db_config
     result = run_alembic(ctx.args, project_config, db_config)
-    typer.secho(result.stdout)
+    if not result.returncode == 0:
+        typer.secho(result.stdout)
+        typer.secho(result.stderr)
+    else:
+        typer.secho(result.stdout)
+    sys.exit(result.returncode)
 
 
 @app.command()
