@@ -8,6 +8,7 @@ from shed.settings import (
     DatabaseConfig,
     Settings,
     SqliteConnection,
+    PostgresConnection,
 )
 
 
@@ -18,6 +19,15 @@ def test_sqlite_config_valid():
     )
     assert config.type == "sqlite"
     assert isinstance(config.connection, SqliteConnection)
+    assert isinstance(config.db_name, str)
+
+
+def test_pg_config_valid():
+    """Test valid SQLite configuration."""
+    config = DatabaseConfig(type="postgres", connection={})
+    assert config.type == "postgres"
+    assert isinstance(config.connection, PostgresConnection)
+    assert isinstance(config.db_name, str)
 
 
 def test_empty_settings_creation():

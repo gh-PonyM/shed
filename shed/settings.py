@@ -86,9 +86,9 @@ class DatabaseConfig(BaseModel):
     connection: SqliteConnection | PostgresConnection
 
     @property
-    def db_name(self):
-        # TODO: unclear type
-        return getattr(self.connection, "database", self.connection.db_path)
+    def db_name(self) -> str:
+        db = getattr(self.connection, "database")
+        return db if db else str(self.connection.db_path)
 
 
 class ProjectConfig(SettingsRelPaths):
