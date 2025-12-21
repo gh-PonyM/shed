@@ -136,11 +136,11 @@ def migrate(
     target: ProjectEnv,
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="Show what would be done without executing"),
+        typer.Option("--dry-run", help="Emit sql without executing"),
     ] = False,
     revision: Annotated[
         str, typer.Option("--revision", help="Target revision")
-    ] = "HEAD",
+    ] = "head",
 ):
     """Run database migrations."""
     result = migrate_database(

@@ -239,7 +239,7 @@ def migrate_database(
     project_config: ProjectConfig,
     db_config: DatabaseConfig,
     dry_run: bool = False,
-    revision: str = "HEAD",
+    revision: str = "head",
 ) -> MigrateResult:
     """Run database migrations."""
     cmd = ["upgrade", revision]
@@ -253,10 +253,11 @@ def migrate_database(
             message=f"Failed to run alembic migrations ‘{db_config.db_name}’ ({db_config.type}): {result.stderr}",
             sql=result.stdout.strip() if dry_run else None,
         )
-    action = "[DRY RUN] Would migrate" if dry_run else "Migrated"
     return MigrateResult(
         success=True,
-        message=f"{action} database ‘{db_config.db_name}’ ({db_config.type})",
+        message=result.stdout
+        if dry_run
+        else f"Migrated database ‘{db_config.db_name}’ ({db_config.type})",
     )
 
 

@@ -2,8 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from shed.cli import app
-from shed.settings import Settings, ProjectConfig
+from shed.settings import Settings, ProjectConfig, PostgresConnection
+from tests.conftest import get_db_host
 
 
 def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
@@ -75,25 +78,6 @@ def test_migrate_command_invalid_target_format(runner, cli_settings):
     result = runner.invoke(app, ["migrate", "projectA.foo"])
     assert result.exit_code == 2
     assert "Project 'projectA' has no environment named" in result.stderr
-
-
-#
-# def test_migrate_command_with_message(runner, cli_settings):
-#     """Test migrate command with message option."""
-#     result = runner.invoke(
-#         app, ["migrate", "projectA.staging", "--message", "Test migration"]
-#     )
-#
-#     assert result.exit_code == 0
-#     assert "Migrated database " in result.stdout
-#
-#
-# def test_migrate_command_with_revision(runner, cli_settings):
-#     """Test migrate command with revision option."""
-#     result = runner.invoke(app, ["migrate", "projectA.staging", "--revision", "abc123"])
-#
-#     assert result.exit_code == 0
-#     assert "Migrated database " in result.stdout
 
 
 def test_clone_command_success(runner, cli_settings):
@@ -228,6 +212,10 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
         assert "def upgrade()" in content
         assert "def downgrade()" in content
 
+    # Migrate
+    r = runner.invoke(app, ["migrate", project_name])
+    assert r.exit_code == 0
+
 
 def clear_revisions(pr_config: ProjectConfig):
     for file in pr_config.versions_dir.glob("*.py"):
@@ -282,3 +270,99 @@ def test_revision_command_relative_paths(
     )
     assert r.exit_code == 0, r.stdout
     assert conn.db_path.is_file()
+
+    # Migrate
+    r = temp_dir_runner.invoke(app, ["migrate", project_name])
+    assert r.exit_code == 0
+
+
+@pytest.mark.skipif(
+    condition=not get_db_host(),
+    reason="environment variable for testing with postgres not set",
+)
+def test_postgres_migration(temp_dir_runner, temp_settings_dir):
+    """Test postgres migration using sample_settings_data."""
+    import shutil
+    from pathlib import Path
+
+    # Get project configuration from sample_settings_data
+    project_name = "foobar"
+    env = "prod"
+
+    # Setup project directory with test models
+    tests_dir = Path(__file__).parent
+    source_models_path = tests_dir / "fixtures" / "models.py"
+    project_dir = temp_settings_dir / project_name
+    project_dir.mkdir(exist_ok=True)
+    target_models_path = project_dir / "models.py"
+    migrations_dir = project_dir / "migrations"
+    versions_dir = migrations_dir / "versions"
+    # Copy test models to the project directory
+    shutil.copy2(source_models_path, target_models_path)
+    # print(cli_settings.model_dump_json(indent=2))
+    pg_conn = PostgresConnection(
+        host="localhost",
+        port=5433,
+        username="dev",
+        password="dev_pass",
+        database="dev_db",
+    )
+    cmd = ["init", project_name, "--env", env, "-c", pg_conn.get_dsn]
+    r = temp_dir_runner.invoke(
+        app,
+        cmd,
+        catch_exceptions=True,
+    )
+    assert r.exit_code == 0
+
+    target = f"{project_name}.{env}"
+    # Create a revision for postgres prod environment
+    commit_msg = "Initial postgres migration"
+    result = temp_dir_runner.invoke(
+        app,
+        [
+            "revision",
+            target,
+            "--message",
+            commit_msg,
+        ],
+    )
+
+    # show history
+    r = temp_dir_runner.invoke(
+        app,
+        [
+            "alembic",
+            target,
+            "history",
+        ],
+    )
+    assert r.exit_code == 0
+    assert commit_msg in r.stdout
+
+    # The command might fail if postgres is not running, so we check for either success
+    # or a meaningful postgres connection error
+    assert result.exit_code == 0
+    assert "Created revision: Initial postgres migration" in result.stdout
+    # Check that the revision file was created
+    revision_files = list(versions_dir.glob("*.py"))
+    assert len(revision_files) == 1
+
+    # Check that the revision file contains expected content
+    with open(revision_files[0]) as f:
+        content = f.read()
+        assert "Initial postgres migration" in content
+        assert "def upgrade()" in content
+        assert "def downgrade()" in content
+
+    # Emit sql
+    r = temp_dir_runner.invoke(app, ["migrate", target, "--dry-run"])
+    assert "CREATE TABLE alembic_version" in r.stdout
+    assert 'CREATE TABLE "user"' in r.stdout
+    print(r.stdout)
+    assert "CREATE TABLE post" in r.stdout
+    # Test dry-run migration
+    assert r.exit_code == 0
+
+    r = temp_dir_runner.invoke(app, ["migrate", target])
+    assert r.exit_code == 0

@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+from os import getenv
 from pathlib import Path
 from traceback import print_tb
 
@@ -110,3 +111,7 @@ def temp_dir_runner(temp_settings_dir):
     """Create CLI test runner."""
     with cd_to_directory(temp_settings_dir):
         yield CliRunner()
+
+
+def get_db_host():
+    return getenv("SHED_TEST_DB_HOST", "")
