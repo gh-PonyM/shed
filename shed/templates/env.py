@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path("{models_path}").parent))
 # Import the models
 from {models_import_path} import *
 from sqlmodel import SQLModel
+import re
+
 target_metadata = SQLModel.metadata
 
 config = context.config
@@ -25,6 +27,17 @@ def get_dsn_from_env():
     if not dsn:
         raise ValueError("SHED_CURRENT_DSN environment variable is not set")
     return dsn
+
+
+def get_schema():
+    schema = os.getenv("SHED_CURRENT_SCHEMA", "")
+    if schema:
+        m = re.match(r"^[a-z_]+$", schema)
+        if not m:
+            raise ValueError(f"schema is not valid")
+        return m.group(0)
+    return schema
+
 
 def run_migrations_offline() -> None:
     # Use DSN from environment variable if available, otherwise fall back to config
@@ -53,12 +66,12 @@ def run_migrations_online() -> None:
     except ValueError:
         # If environment variable is not set, use the one from config file
         pass
-    
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+    schema = get_schema()
 
     with connectable.connect() as connection:
         context.configure(
@@ -66,6 +79,8 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            if schema:
+                context.execute(f"SET search_path TO " + schema)
             context.run_migrations()
 
 if context.is_offline_mode():

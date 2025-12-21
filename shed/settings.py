@@ -54,6 +54,10 @@ class SqliteConnection(SettingsRelPaths):
         """Get SQLAlchemy DSN for SQLite connection."""
         return f"sqlite:///{self.db_path}"
 
+    @property
+    def schema_name(self) -> str:
+        return ""
+
 
 class PostgresConnection(SettingsRelPaths):
     """PostgreSQL database connection configuration."""
@@ -63,6 +67,9 @@ class PostgresConnection(SettingsRelPaths):
     username: str = "postgres"
     database: str = "postgres"
     password: str = "postgres"
+    schema_name: str = Field(
+        "public", description="Use this schema for migrations if set"
+    )
 
     @property
     def get_dsn(self) -> str:

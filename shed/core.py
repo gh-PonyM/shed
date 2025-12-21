@@ -191,6 +191,7 @@ def run_alembic(
         cmd = ["alembic", "-c", str(tmp / "alembic.ini"), *cmd]
         env = os.environ.copy()
         env["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
+        env["SHED_CURRENT_SCHEMA"] = db_config.connection.schema_name
         result = subprocess.run(
             cmd,
             capture_output=True,

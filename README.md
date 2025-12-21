@@ -71,6 +71,7 @@ projects:
           password: pw
           port: 5432
           username: user
+          schema_name: public
         type: postgres
     module: projects/news_agg/models.py
 ```
