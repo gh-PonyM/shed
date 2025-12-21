@@ -189,13 +189,14 @@ def run_alembic(
         create_alembic_temp_files(tmp, project_cfg.module, project_cfg.versions_dir)
         # Run alembic revision command
         cmd = ["alembic", "-c", str(tmp / "alembic.ini"), *cmd]
-        # TODO: get_dsn does not resolve with the project
-        os.environ["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
+        env = os.environ.copy()
+        env["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             cwd=str(project_cfg.migrations_dir.parent),
+            env=env,
         )
     return result
 
