@@ -7,10 +7,10 @@ import os
 from pathlib import Path
 
 # Add the project module to Python path
-sys.path.insert(0, str(Path("{models_path}").parent))
+sys.path.insert(0, str(Path("{{ models_path }}").parent))
 
 # Import the models
-from {models_import_path} import *
+from {{ models_import_path }} import *
 from sqlmodel import SQLModel
 import re
 
@@ -45,12 +45,19 @@ def run_migrations_offline() -> None:
         url = get_dsn_from_env()
     except ValueError:
         url = config.get_main_option("sqlalchemy.url")
-    
+
+    schema = get_schema()
+    configure_kwargs = {}
+    if schema:
+        configure_kwargs["version_table_schema"] = schema
+        configure_kwargs["include_schemas"] = True
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={{"paramstyle": "named"}},
+        dialect_opts={"paramstyle": "named"},
+        **configure_kwargs
     )
 
     with context.begin_transaction():
@@ -58,8 +65,8 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     # Get configuration section
-    configuration = config.get_section(config.config_ini_section, {{}})
-    
+    configuration = config.get_section(config.config_ini_section, {})
+
     # Override sqlalchemy.url with environment variable if available
     try:
         configuration["sqlalchemy.url"] = get_dsn_from_env()

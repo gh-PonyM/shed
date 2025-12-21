@@ -1,5 +1,6 @@
 import contextlib
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import NamedTuple, Any, Callable, Generator
@@ -14,6 +15,15 @@ from sqlmodel import SQLModel
 
 from .constants import PROG_NAME
 from .settings import DatabaseConfig, ProjectConfig, Settings, DBType
+
+
+def render_template(template: str, **variables: Any) -> str:
+    """Poor mans jinja function"""
+    result = template
+    for key, value in variables.items():
+        # Replace {{key}} and {{ key }} patterns (with optional spaces)
+        result = re.sub(r"\{\{\s*" + re.escape(key) + r"\s*\}\}", str(value), result)
+    return result
 
 
 class InitResult(NamedTuple):
@@ -156,7 +166,8 @@ def create_alembic_temp_files(tmp: Path, models_path: Path, versions_dir: Path) 
     alembic_ini_content = (templates_path / "alembic.ini").read_text()
     # Create temporary env.py file
     env_py_content = (templates_path / "env.py").read_text()
-    env_py_content = env_py_content.format(
+    env_py_content = render_template(
+        env_py_content,
         models_path=models_path,
         models_import_path=models_path.stem,
     )
@@ -164,8 +175,10 @@ def create_alembic_temp_files(tmp: Path, models_path: Path, versions_dir: Path) 
 
     alembic_ini_path = tmp / "alembic.ini"
     alembic_script_dir = tmp
-    alembic_ini_content = alembic_ini_content.format(
-        script_dir=str(alembic_script_dir), versions_dir=str(versions_dir)
+    alembic_ini_content = render_template(
+        alembic_ini_content,
+        script_dir=str(alembic_script_dir),
+        versions_dir=str(versions_dir),
     )
     alembic_ini_path.write_text(alembic_ini_content)
 

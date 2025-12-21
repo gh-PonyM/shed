@@ -338,6 +338,7 @@ def test_postgres_migration(temp_dir_runner, temp_settings_dir):
         ],
     )
     assert r.exit_code == 0
+    print(r.stdout)
     assert commit_msg in r.stdout
 
     # The command might fail if postgres is not running, so we check for either success
@@ -357,7 +358,8 @@ def test_postgres_migration(temp_dir_runner, temp_settings_dir):
 
     # Emit sql
     r = temp_dir_runner.invoke(app, ["migrate", target, "--dry-run"])
-    assert "CREATE TABLE alembic_version" in r.stdout
+    print(r.stdout)
+    assert "CREATE TABLE public.alembic_version" in r.stdout
     assert 'CREATE TABLE "user"' in r.stdout
     print(r.stdout)
     assert "CREATE TABLE post" in r.stdout
