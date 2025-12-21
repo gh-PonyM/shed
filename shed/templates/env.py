@@ -1,5 +1,5 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, text
 from sqlalchemy import pool
 from alembic import context
 import sys
@@ -29,7 +29,7 @@ def get_dsn_from_env():
     return dsn
 
 
-def get_schema():
+def get_tenant():
     schema = os.getenv("SHED_CURRENT_SCHEMA", "")
     if schema:
         m = re.match(r"^[a-z_]+$", schema)
@@ -46,10 +46,10 @@ def run_migrations_offline() -> None:
     except ValueError:
         url = config.get_main_option("sqlalchemy.url")
 
-    schema = get_schema()
+    tenant = get_tenant()
     configure_kwargs = {}
-    if schema:
-        configure_kwargs["version_table_schema"] = schema
+    if tenant:
+        configure_kwargs["version_table_schema"] = tenant
         configure_kwargs["include_schemas"] = True
 
     context.configure(
@@ -78,16 +78,33 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    schema = get_schema()
+    current_tenant = get_tenant()
 
     with connectable.connect() as connection:
+        if current_tenant:
+            if connection.dialect.name == "postgresql":
+                # set search path on the connection, which ensures that
+                # PostgreSQL will emit all CREATE / ALTER / DROP statements
+                # in terms of this schema by default
+
+                connection.execute(text('set search_path to "%s"' % current_tenant))
+                # in SQLAlchemy v2+ the search path change needs to be committed
+                connection.commit()
+            elif connection.dialect.name in ("mysql", "mariadb"):
+                # set "USE" on the connection, which ensures that
+                # MySQL/MariaDB will emit all CREATE / ALTER / DROP statements
+                # in terms of this schema by default
+
+                connection.execute(text('USE %s' % current_tenant))
+
+                # make use of non-supported SQLAlchemy attribute to ensure
+                # the dialect reflects tables in terms of the current tenant name
+            connection.dialect.default_schema_name = current_tenant
         context.configure(
             connection=connection, target_metadata=target_metadata
         )
 
         with context.begin_transaction():
-            if schema:
-                context.execute(f"SET search_path TO " + schema)
             context.run_migrations()
 
 if context.is_offline_mode():
