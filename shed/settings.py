@@ -87,7 +87,7 @@ class DatabaseConfig(BaseModel):
 
     @property
     def db_name(self) -> str:
-        db = getattr(self.connection, "database")
+        db = getattr(self.connection, "database", None)
         return db if db else str(self.connection.db_path)
 
 
