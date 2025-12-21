@@ -75,6 +75,8 @@ Thumbs.db
 *.db
 migrations/versions/
 .shed_settings.yaml
+shed_settings.yml
+projects/news_agg/migrations/versions/*
 
 # Temporary files
 *.tmp
@@ -85,6 +87,3 @@ migrations/versions/
 # Editors
 .idea/
 .aider*
-
-# config
-shed_settings.yml

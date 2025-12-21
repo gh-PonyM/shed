@@ -29,7 +29,13 @@ Create a new project inside the projects folder:
 
 Or using a sqlite database:
 
-    shed init news_agg -o projects -c sqlite:///projects/domteur.sqlite --env dev
+    shed init news_agg -o projects -c sqlite:///news-lab.sqlite --env lab
+
+    # Use an the lab db file
+    shed revision news_agg.lab
+
+    # Use the development db for the project, remove the migrations
+    shed revision news_agg
 
 This will create the following folder structure:
 
@@ -41,12 +47,14 @@ projects
     └── models.py
 ```
 
-This will create a config file for local and prod databases using sqlite for local and postgres for prod. 
+The command using a postgres dns will produce this config file: 
+
 ```yaml
 development:
   db:
     news_agg:
       connection:
+        # Path relative to the config file
         db_path: news_agg.sqlite
       type: sqlite
 projects:
@@ -60,7 +68,7 @@ projects:
           port: 5432
           username: user
         type: postgres
-    module: ./projects/news_agg/models.py
+    module: projects/news_agg/models.py
 ```
 
 Then just define your `SQLModel` files as in [models.py](projects/news_agg/models.py).

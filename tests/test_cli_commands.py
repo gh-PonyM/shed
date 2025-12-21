@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from shed.cli import app
-from shed.settings import Settings
+from shed.settings import Settings, ProjectConfig
 
 
 def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
@@ -29,7 +29,9 @@ def test_init_command_success(runner, cli_settings_path, temp_settings_dir):
     # Check that projectA was added to the configuration
     assert "projectA" in loaded_settings.projects
     project_config = loaded_settings.projects["projectA"]
-    assert project_config.module == Path("projectA/models.py")
+    assert project_config.module.relative_to(temp_settings_dir) == Path(
+        "projectA/models.py"
+    )
     assert project_config.db == {}  # Should be empty dict for new project
 
 
@@ -201,7 +203,7 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
 
     settings = Settings.from_file(cli_settings_path)
     models_p = settings.projects[project_name].module
-    assert not models_p.is_absolute()
+    assert models_p.is_absolute(), "Only convert to rel paths on serialize"
     assert (
         settings.settings_path.parent / models_p
     ).absolute() == target_models_path.absolute()
@@ -227,6 +229,11 @@ def test_revision_command_success(runner, cli_settings_path, temp_settings_dir):
         assert "def downgrade()" in content
 
 
+def clear_revisions(pr_config: ProjectConfig):
+    for file in pr_config.versions_dir.glob("*.py"):
+        file.unlink()
+
+
 def test_revision_command_relative_paths(
     temp_dir_runner, cli_settings_path, temp_settings_dir
 ):
@@ -237,28 +244,41 @@ def test_revision_command_relative_paths(
     out = "projects"
 
     # Relative path to db
-    rel_db_conn = "sqlite:///test.sqlite"
+    rel_db_conn = "sqlite:///lab.sqlite"
     assert not cli_settings_path.is_file()
+    cmd = ["init", project_name, "-o", out, "--env", env, "-c", rel_db_conn]
     r = temp_dir_runner.invoke(
         app,
-        ["init", project_name, "-o", out, "--env", env, "-c", rel_db_conn],
+        cmd,
         catch_exceptions=True,
     )
     assert r.exit_code == 0, r.stdout
     assert cli_settings_path.is_file()
     s = Settings.from_file(cli_settings_path)
+    pr_config = s.projects[project_name]
     print(s.model_dump_json(indent=2))
-    conn = s.projects[project_name].db[env].connection
-    assert conn.get_dsn == rel_db_conn
-    models_p = s.projects[project_name].module
-    assert not models_p.is_absolute(), "The models path should not be absolute"
+    conn = pr_config.db[env].connection
+    assert conn.get_dsn != rel_db_conn, (
+        "DSN must contain absolute path to ensure migrations work"
+    )
+    models_p = pr_config.module
+    assert models_p.is_absolute(), "The models path should be absolute as well"
+    dev_db = s.development.db[project_name].connection.db_path
+    assert dev_db.is_absolute(), (
+        "Loading the settings should convert the dev db path to an absolute path"
+    )
 
     # Empty revision for development db
+    assert not dev_db.is_file()
     r = temp_dir_runner.invoke(app, ["revision", project_name], catch_exceptions=True)
     assert r.exit_code == 0, r.stdout
+    assert dev_db.is_file()
 
     # Empty revision for environment db also sqlite but given with relative connection string
+    assert not conn.db_path.is_file()
+    clear_revisions(pr_config)
     r = temp_dir_runner.invoke(
         app, ["revision", f"{project_name}.{env}"], catch_exceptions=True
     )
     assert r.exit_code == 0, r.stdout
+    assert conn.db_path.is_file()

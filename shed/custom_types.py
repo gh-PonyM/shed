@@ -20,6 +20,7 @@ def parse_connection(value: str) -> "DBConnection":
     if parsed.drivername == "sqlite":
         if not parsed.database:
             raise typer.BadParameter("SQLite URI must include a path")
+        # Note that to be added to the settings, the path must be converted to an absolute path
         cfg = DatabaseConfig(
             type="sqlite", connection=SqliteConnection(db_path=Path(parsed.database))
         )

@@ -26,9 +26,12 @@ def test_empty_settings_creation():
     assert settings.development is not None
     assert settings.projects == {}
 
-    settings.development.add_connection("testproject", db_type="sqlite")
-    assert settings.development.db["testproject"].connection.db_path == Path(
-        "testproject.sqlite"
+    settings.development.add_connection(
+        "testproject", db_type="sqlite", dev_db_dir=Path()
+    )
+    assert (
+        settings.development.db["testproject"].connection.db_path
+        == Path("testproject.sqlite").absolute()
     )
 
     settings.development.add_connection(

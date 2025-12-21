@@ -104,6 +104,10 @@ def init(
 ):
     """Initialize migration folder for a project."""
     settings: Settings = ctx.obj["settings"]
+    if connection:
+        connection.value.connection._convert_paths(
+            settings.settings_path.parent.absolute(), mode="abs"
+        )
     result = init_project(
         settings,
         project_name,

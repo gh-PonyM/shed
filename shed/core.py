@@ -92,7 +92,9 @@ def init_project(
     project_config = settings.add_project(project_name, models_path)
     if db_config:
         project_config.db[env_name] = db_config
-    settings.development.add_connection(project_name, db_type=dev_db_type)
+    settings.development.add_connection(
+        project_name, db_type=dev_db_type, dev_db_dir=s_p
+    )
     settings.save()
 
     # Create migrations directory next to the module (always in the parent directory since module is a .py file)

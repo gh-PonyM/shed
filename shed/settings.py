@@ -2,7 +2,7 @@
 
 from functools import partial
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal
 
 import yaml
 from pydantic import (
@@ -38,7 +38,7 @@ def path_convert(root: Path, value: Path, mode: ConvertMode) -> Path:
 
 class SettingsRelPaths(BaseModel):
     def _convert_paths(self, path: Path, mode: Literal["rel", "abs"] = "rel"):
-        for name, f_info in self.model_fields.items():
+        for name, f_info in self.__class__.model_fields.items():
             if f_info.annotation == Path:
                 new_val = path_convert(path, getattr(self, name), mode)
                 setattr(self, name, new_val)
@@ -113,33 +113,49 @@ class ProjectConfig(SettingsRelPaths):
             db.connection._convert_paths(path, mode)
 
 
+def connection_sqlite(
+    project_name: str, dev_db_dir: Path, **unused
+) -> dict[str, DatabaseConfig]:
+    return {
+        project_name: DatabaseConfig(
+            type="sqlite",
+            connection=SqliteConnection(db_path=dev_db_dir / f"{project_name}.sqlite"),
+        )
+    }
+
+
+def connection_postgres(
+    project_name: str, **connection_args
+) -> dict[str, DatabaseConfig]:
+    return {
+        project_name: DatabaseConfig(
+            type="postgres", connection=PostgresConnection(**connection_args)
+        )
+    }
+
+
 class DevelopmentConfig(BaseModel):
     """Development database configuration."""
 
     db: dict[str, DatabaseConfig] = Field(default_factory=dict)
 
-    @staticmethod
-    def connection_sqlite(project_name: str, **unused):
-        return {
-            project_name: DatabaseConfig(
-                type="sqlite",
-                connection=SqliteConnection(db_path=Path(f"{project_name}.sqlite")),
-            )
-        }
-
-    @staticmethod
-    def connection_postgres(project_name: str, **connection_args):
-        return {
-            project_name: DatabaseConfig(
-                type="postgres", connection=PostgresConnection(**connection_args)
-            )
-        }
-
-    def add_connection(self, project_name: str, db_type: DBType, **connection_args):
+    def add_connection(
+        self,
+        project_name: str,
+        db_type: DBType,
+        dev_db_dir: Path | None = None,
+        **connection_args,
+    ):
         fn_map = {
-            "sqlite": self.connection_sqlite,
-            "postgres": self.connection_postgres,
+            "sqlite": connection_sqlite,
+            "postgres": connection_postgres,
         }
+        if db_type == "sqlite" and not dev_db_dir:
+            raise ValueError(
+                "For sqlite, set the parent directory of the db with 'dev_db_dir'"
+            )
+        if dev_db_dir:
+            connection_args.update({"dev_db_dir": dev_db_dir.absolute()})
         self.db.update(fn_map[db_type](project_name, **connection_args))
 
 
@@ -195,8 +211,11 @@ class Settings(BaseModel):
             yaml.dump(data_dump, f, default_flow_style=False, indent=2)
 
     def _convert_paths(self, mode: Literal["rel", "abs"] = "rel"):
+        root = self.settings_path.parent.absolute()
         for proj in self.projects.values():
-            proj._convert_paths(self.settings_path.parent.absolute(), mode)
+            proj._convert_paths(root, mode)
+        for db_config in self.development.db.values():
+            db_config.connection._convert_paths(root, mode)
 
     @model_serializer(mode="wrap")
     def serialize_model(
@@ -210,7 +229,7 @@ class Settings(BaseModel):
         return serialized
 
     @model_validator(mode="after")
-    def validate_paths(self) -> Self:
+    def validate_paths(self):
         if self.settings_path:
             self._convert_paths(mode="abs")
         return self
