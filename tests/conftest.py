@@ -201,14 +201,15 @@ class ProjectHelper:
         """Clears the database for all operations made."""
         self._close_connection()
         # Connect to 'postgres' database to drop/recreate the target database
-        self._run_sql_with_autocommit(
+        for sql in (
             f'DROP DATABASE IF EXISTS "{self.current_db_conn.database}"',
-            database="postgres",
-        )
-        self._run_sql_with_autocommit(
             f'CREATE DATABASE "{self.current_db_conn.database}"',
-            database="postgres",
-        )
+            "DROP TABLE IF EXISTS public.alembic_version"
+        ):
+            self._run_sql_with_autocommit(
+                sql,
+                database="postgres",
+            )
 
     def select_target(self, target: str):
         """Select a db connection as you would with shed myproject.env or myproject."""

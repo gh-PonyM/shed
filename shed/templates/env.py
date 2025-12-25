@@ -30,14 +30,14 @@ def get_dsn_from_env():
     return dsn
 
 
-def get_tenant():
+def get_tenant() -> str | None:
     schema = os.getenv("SHED_CURRENT_SCHEMA", "")
     if schema:
         m = re.match(r"^[a-z_]+$", schema)
         if not m:
-            raise ValueError(f"schema is not valid")
+            raise ValueError(f"schema is not valid: {schema}")
         return m.group(0)
-    return schema
+    return None
 
 
 def get_logger():
@@ -120,8 +120,7 @@ def run_migrations_online() -> None:
                 # set search path on the connection, which ensures that
                 # PostgreSQL will emit all CREATE / ALTER / DROP statements
                 # in terms of this schema by default
-                sql = f'set search_path to "{current_tenant}"'
-                connection.execute(text(sql))
+                connection.execute(text(f'set search_path to "{current_tenant}"'))
                 # in SQLAlchemy v2+ the search path change needs to be committed
                 connection.commit()
             elif dialect in ("mysql", "mariadb"):
@@ -135,13 +134,16 @@ def run_migrations_online() -> None:
                 # the dialect reflects tables in terms of the current tenant name
             connection.dialect.default_schema_name = current_tenant
 
-        configure_kwargs = {"include_schemas": False}
+        configure_kwargs = {
+            "include_schemas": False,
+            # "version_table_schema": current_tenant,
+            "include_object": get_include_func(dialect)
+        }
 
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            **configure_kwargs,
-            include_object=get_include_func(dialect)
+            **configure_kwargs
         )
 
         with context.begin_transaction():

@@ -134,17 +134,18 @@ def test_schema_prod(temp_dir_runner, pg_schemas_project):
     pr = pg_schemas_project
     pr.create_dummy_table("foobar", schema="public")
     pr.create_dummy_table("delete_me", schema="prod")
-    prod_tables = pr.get_tables_in_schema("prod")
-    assert prod_tables
-    target = "lab.prod"
 
+    target = "lab.prod"
     r = revision(temp_dir_runner, target, "prod using a schema")
     assert r.exit_code == 0
+    assert "alembic_version" in pr.get_tables_in_schema("prod")
+    assert "alembic_version" not in pr.get_tables_in_schema("public")
+
     content = pr.last_revision_content
     assert "op.create_table('flight'" in content, "This model is also included"
     assert "foobar" not in content, "foobar is in another schema, no drop table foobar"
-    print(content)
     assert "delete_me" in content
+
     r = migrate_dry_run(temp_dir_runner, target)
     assert r.exit_code == 0
     assert "INSERT INTO alembic_version" in r.stdout, (
