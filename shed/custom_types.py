@@ -81,23 +81,26 @@ def parse_project_string(settings: Settings, value: str) -> ProjectEnvironment:
         raise typer.BadParameter(
             f"Project '{project_name}' not found in projects.",
         )
+
+    project_config = settings.projects[project_name]
+
     if env_name:
-        if env_name not in settings.projects[project_name].db:
+        if env_name not in project_config.db:
             raise typer.BadParameter(
                 f"Project '{project_name}' has no environment named '{env_name}'"
             )
+        db_config = project_config.db[env_name]
     else:
-        if project_name not in settings.development.db:
+        # Try to auto-detect development database
+        dev_db = settings.get_dev_db(project_name)
+        if not dev_db:
             raise typer.BadParameter(
-                f"Project '{project_name}' not found in development"
+                f"Could not determine development database for project '{project_name}'. "
+                f"Either specify environment explicitly (e.g., '{project_name}.env'), "
+                f"or ensure there is exactly one database named '{project_name}', 'dev*', or '*dev'."
             )
+        db_config = dev_db
 
-    project_config = settings.projects[project_name]
-    db_config = (
-        project_config.db[env_name]
-        if env_name
-        else settings.development.db[project_name]
-    )
     return ProjectEnvironment(
         project_name=project_name,
         environment_name=env_name,

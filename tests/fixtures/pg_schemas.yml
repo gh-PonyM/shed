@@ -1,0 +1,21 @@
+projects:
+  lab:
+    db:
+      dev:
+        connection:
+          database: dev_db
+          host: localhost
+          password: dev_pass
+          port: 5433
+          username: dev
+          type: postgres
+      prod:
+        connection:
+          database: dev_db
+          host: localhost
+          password: dev_pass
+          port: 5433
+          username: dev
+          schema_name: prod
+          type: postgres
+    module: projects/pg_schemas/models.py

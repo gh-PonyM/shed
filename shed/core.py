@@ -1,9 +1,10 @@
 import contextlib
+import importlib.util
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import NamedTuple, Any, Callable, Generator
+from typing import NamedTuple, Any, Callable, Generator, Literal
 import importlib
 import inspect
 from functools import lru_cache
@@ -14,7 +15,13 @@ from pydantic import BaseModel
 from sqlmodel import SQLModel
 
 from .constants import PROG_NAME
-from .settings import DatabaseConfig, ProjectConfig, Settings, DBType
+from .settings import (
+    DatabaseConfig,
+    ProjectConfig,
+    Settings,
+    SqliteConnection,
+    PostgresConnection,
+)
 
 
 def render_template(template: str, **variables: Any) -> str:
@@ -77,7 +84,7 @@ def init_project(
     output_dir: Path | None = None,
     db_config: DatabaseConfig | None = None,
     env_name: str = "prod",
-    dev_db_type: DBType = "sqlite",
+    dev_db_type: Literal["sqlite", "postgres"] = "sqlite",
 ) -> InitResult:
     """Initialize migration folder for a project, creating project config if needed."""
     config_created = False
@@ -100,11 +107,20 @@ def init_project(
     if project_name not in settings.projects:
         config_created = True
     project_config = settings.add_project(project_name, models_path)
+
+    # Add production database if provided
     if db_config:
         project_config.db[env_name] = db_config
-    settings.development.add_connection(
-        project_name, db_type=dev_db_type, dev_db_dir=s_p
-    )
+
+    # Add development database to the project
+    dev_env_name = project_name  # Use project name as default dev environment name
+    if dev_db_type == "sqlite":
+        dev_connection = SqliteConnection(db_path=s_p / f"{project_name}.sqlite")
+        project_config.db[dev_env_name] = DatabaseConfig(connection=dev_connection)
+    else:  # postgres
+        dev_connection = PostgresConnection(database=project_name)
+        project_config.db[dev_env_name] = DatabaseConfig(connection=dev_connection)
+
     settings.save()
 
     # Create migrations directory next to the module (always in the parent directory since module is a .py file)
@@ -121,7 +137,7 @@ def init_project(
     migrations_dir.mkdir(parents=True, exist_ok=True)
     versions_dir = migrations_dir / "versions"
     versions_dir.mkdir(exist_ok=True)
-    dev_db = settings.development.db[project_name].db_name
+    dev_db = project_config.db[dev_env_name].db_name
 
     message_parts = []
     if config_created:
@@ -148,9 +164,10 @@ def clone_database(
     """Clone database from source to target (assumes same type already validated)."""
     # TODO: Implement actual database cloning logic
     action = "[DRY RUN] Would clone" if dry_run else "Cloned"
+    db_type = src_db_config.connection.type
     return CloneResult(
         success=True,
-        message=f"{action} {src_db_config.db_name} to {tgt_db_config.db_name} ({src_db_config.type})",
+        message=f"{action} {src_db_config.db_name} to {tgt_db_config.db_name} ({db_type})",
     )
 
 
@@ -204,7 +221,7 @@ def run_alembic(
         cmd = ["alembic", "-c", str(tmp / "alembic.ini"), *cmd]
         env = os.environ.copy()
         env["SHED_CURRENT_DSN"] = db_config.connection.get_dsn
-        env["SHED_CURRENT_SCHEMA"] = db_config.connection.schema_name
+        env["SHED_CURRENT_SCHEMA"] = db_config.connection.schema_name or ""
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -220,8 +237,11 @@ def create_revision(
     db_config: DatabaseConfig,
     message: str,
     autogenerate: bool = True,
+    use_ruff: bool = True,
 ) -> RevisionResult:
     """Create a new migration revision using alembic."""
+    from .utils import format_with_ruff, is_ruff_available
+
     migrations_dir = project_config.migrations_dir
     versions_dir = project_config.versions_dir
 
@@ -242,6 +262,11 @@ def create_revision(
     # Find the created revision file
     revision_files = list(versions_dir.glob("*.py"))
     latest_revision = max(revision_files, key=lambda p: p.stat().st_mtime, default=None)
+
+    # Format with ruff if enabled and available
+    if use_ruff and latest_revision and is_ruff_available():
+        format_with_ruff(latest_revision)
+
     return RevisionResult(
         success=True,
         message=f"Created revision: {message}",
@@ -261,12 +286,19 @@ def migrate_database(
         # Does not apply migration to db, but emits sql to stdout
         cmd.append("--sql")
     result = run_alembic(cmd, project_config, db_config)
+    db_type = db_config.connection.type
     if result.returncode != 0:
         return MigrateResult(
             success=False,
-            message=f"Failed to run alembic migrations ‘{db_config.db_name}’ ({db_config.type}): {result.stderr}",
+            message=f"Failed to run alembic migrations '{db_config.db_name}' ({db_type}): {result.stderr}",
             sql=result.stdout.strip() if dry_run else None,
         )
+    return MigrateResult(
+        success=True,
+        message=result.stdout
+        if dry_run
+        else f"Migrated database '{db_config.db_name}' ({db_type})",
+    )
     return MigrateResult(
         success=True,
         message=result.stdout

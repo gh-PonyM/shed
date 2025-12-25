@@ -5,6 +5,7 @@ from alembic import context
 import sys
 import os
 from pathlib import Path
+import logging
 
 # Add the project module to Python path
 sys.path.insert(0, str(Path("{{ models_path }}").parent))
@@ -39,6 +40,44 @@ def get_tenant():
     return schema
 
 
+def get_logger():
+    path = os.getenv("SHED_ALEMBIC_LOG_FILE")
+    logger = logging.getLogger(__name__)
+    if not path:
+        # Return a no-op logger if no log file is configured
+        logger.addHandler(logging.NullHandler())
+        return logger
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(path)
+    handler.setFormatter(logging.Formatter(
+        "[%(levelname)s] %(filename)s:%(lineno)d %(message)s"
+    ))
+    logger.addHandler(handler)
+    return logger
+
+
+log = get_logger()
+
+
+def include_object_default(obj, name, type_, reflected, compare_to):
+    return True
+
+
+def include_object_sqlite(obj, name, type_, reflected, compare_to):
+    obj_schema = getattr(obj, "schema", None)
+    log.info(f"include_object_sqlite: {name=}, {type_=}, {reflected=}, {compare_to=}, {obj_schema=}")
+    if obj_schema:
+        log.warning(f"table {name} excluded since sqlite can not handle schemas")
+        return False
+    return True
+
+
+def get_include_func(db_type: str):
+    return {
+        "sqlite": include_object_sqlite
+    }.get(db_type, include_object_default)
+
+
 def run_migrations_offline() -> None:
     # Use DSN from environment variable if available, otherwise fall back to config
     try:
@@ -46,18 +85,12 @@ def run_migrations_offline() -> None:
     except ValueError:
         url = config.get_main_option("sqlalchemy.url")
 
-    tenant = get_tenant()
-    configure_kwargs = {}
-    if tenant:
-        configure_kwargs["version_table_schema"] = tenant
-        configure_kwargs["include_schemas"] = True
-
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        **configure_kwargs
+        include_schemas=False
     )
 
     with context.begin_transaction():
@@ -81,16 +114,17 @@ def run_migrations_online() -> None:
     current_tenant = get_tenant()
 
     with connectable.connect() as connection:
+        dialect = connection.dialect.name
         if current_tenant:
-            if connection.dialect.name == "postgresql":
+            if dialect == "postgresql":
                 # set search path on the connection, which ensures that
                 # PostgreSQL will emit all CREATE / ALTER / DROP statements
                 # in terms of this schema by default
-
-                connection.execute(text('set search_path to "%s"' % current_tenant))
+                sql = f'set search_path to "{current_tenant}"'
+                connection.execute(text(sql))
                 # in SQLAlchemy v2+ the search path change needs to be committed
                 connection.commit()
-            elif connection.dialect.name in ("mysql", "mariadb"):
+            elif dialect in ("mysql", "mariadb"):
                 # set "USE" on the connection, which ensures that
                 # MySQL/MariaDB will emit all CREATE / ALTER / DROP statements
                 # in terms of this schema by default
@@ -100,8 +134,14 @@ def run_migrations_online() -> None:
                 # make use of non-supported SQLAlchemy attribute to ensure
                 # the dialect reflects tables in terms of the current tenant name
             connection.dialect.default_schema_name = current_tenant
+
+        configure_kwargs = {"include_schemas": False}
+
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            **configure_kwargs,
+            include_object=get_include_func(dialect)
         )
 
         with context.begin_transaction():

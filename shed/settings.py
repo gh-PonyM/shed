@@ -6,11 +6,12 @@ from typing import Literal
 
 import yaml
 from pydantic import (
-    BaseModel,
+    BaseModel as PydanticBaseModel,
     Field,
     field_validator,
     model_validator,
     model_serializer,
+    ConfigDict,
 )
 from urllib.parse import quote_plus
 
@@ -18,7 +19,6 @@ from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from shed.constants import DEFAULT_SETTINGS_FN
 
-DBType = Literal["sqlite", "postgres"]
 ConvertMode = Literal["abs", "rel"]
 
 
@@ -36,7 +36,11 @@ def path_convert(root: Path, value: Path, mode: ConvertMode) -> Path:
     )
 
 
-class SettingsRelPaths(BaseModel):
+class BaseModel(PydanticBaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SettingsRelPaths(PydanticBaseModel):
     def _convert_paths(self, path: Path, mode: Literal["rel", "abs"] = "rel"):
         for name, f_info in self.__class__.model_fields.items():
             if f_info.annotation == Path:
@@ -47,6 +51,7 @@ class SettingsRelPaths(BaseModel):
 class SqliteConnection(SettingsRelPaths):
     """SQLite database connection configuration."""
 
+    type: Literal["sqlite"] = "sqlite"
     db_path: Path
 
     @property
@@ -62,13 +67,14 @@ class SqliteConnection(SettingsRelPaths):
 class PostgresConnection(SettingsRelPaths):
     """PostgreSQL database connection configuration."""
 
+    type: Literal["postgres"] = "postgres"
     host: str = "127.0.0.1"
     port: int = 5432
     username: str = "postgres"
     database: str = "postgres"
     password: str = "postgres"
-    schema_name: str = Field(
-        "public", description="Use this schema for migrations if set"
+    schema_name: str | None = Field(
+        None, description="Use this schema for migrations if set"
     )
 
     @property
@@ -86,11 +92,10 @@ class PostgresConnection(SettingsRelPaths):
         return v
 
 
-class DatabaseConfig(BaseModel):
+class DatabaseConfig(PydanticBaseModel):
     """Database configuration for a specific environment."""
 
-    type: DBType
-    connection: SqliteConnection | PostgresConnection
+    connection: SqliteConnection | PostgresConnection = Field(discriminator="type")
 
     @property
     def db_name(self) -> str:
@@ -120,52 +125,6 @@ class ProjectConfig(SettingsRelPaths):
             db.connection._convert_paths(path, mode)
 
 
-def connection_sqlite(
-    project_name: str, dev_db_dir: Path, **unused
-) -> dict[str, DatabaseConfig]:
-    return {
-        project_name: DatabaseConfig(
-            type="sqlite",
-            connection=SqliteConnection(db_path=dev_db_dir / f"{project_name}.sqlite"),
-        )
-    }
-
-
-def connection_postgres(
-    project_name: str, **connection_args
-) -> dict[str, DatabaseConfig]:
-    return {
-        project_name: DatabaseConfig(
-            type="postgres", connection=PostgresConnection(**connection_args)
-        )
-    }
-
-
-class DevelopmentConfig(BaseModel):
-    """Development database configuration."""
-
-    db: dict[str, DatabaseConfig] = Field(default_factory=dict)
-
-    def add_connection(
-        self,
-        project_name: str,
-        db_type: DBType,
-        dev_db_dir: Path | None = None,
-        **connection_args,
-    ):
-        fn_map = {
-            "sqlite": connection_sqlite,
-            "postgres": connection_postgres,
-        }
-        if db_type == "sqlite" and not dev_db_dir:
-            raise ValueError(
-                "For sqlite, set the parent directory of the db with 'dev_db_dir'"
-            )
-        if dev_db_dir:
-            connection_args.update({"dev_db_dir": dev_db_dir.absolute()})
-        self.db.update(fn_map[db_type](project_name, **connection_args))
-
-
 def default_settings_path() -> Path:
     return Path(".") / DEFAULT_SETTINGS_FN
 
@@ -173,7 +132,6 @@ def default_settings_path() -> Path:
 class Settings(BaseModel):
     """Main settings configuration."""
 
-    development: DevelopmentConfig = DevelopmentConfig()
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
 
     settings_path: Path | None = None
@@ -203,6 +161,35 @@ class Settings(BaseModel):
         for name, project in self.projects.items():
             yield name, project.module
 
+    def get_dev_db(self, project_name: str) -> DatabaseConfig | None:
+        """Get development database for a project.
+
+        Looks for a database with the same name as the project, or one matching
+        'dev*' or '*dev' patterns. Returns None if not found or ambiguous.
+        """
+        if project_name not in self.projects:
+            return None
+
+        project = self.projects[project_name]
+
+        # First, try exact match with project name
+        if project_name in project.db:
+            return project.db[project_name]
+
+        # Look for dev* or *dev patterns
+        dev_candidates = [
+            env_name
+            for env_name in project.db.keys()
+            if env_name.lower().startswith("dev") or env_name.lower().endswith("dev")
+        ]
+
+        # Return the db if exactly one dev candidate found
+        if len(dev_candidates) == 1:
+            return project.db[dev_candidates[0]]
+
+        # Return None if no candidates or multiple candidates (ambiguous)
+        return None
+
     def save(self) -> None:
         """Save settings to file."""
         if not self.settings_path:
@@ -221,8 +208,6 @@ class Settings(BaseModel):
         root = self.settings_path.parent.absolute()
         for proj in self.projects.values():
             proj._convert_paths(root, mode)
-        for db_config in self.development.db.values():
-            db_config.connection._convert_paths(root, mode)
 
     @model_serializer(mode="wrap")
     def serialize_model(

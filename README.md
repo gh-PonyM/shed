@@ -31,10 +31,11 @@ Or using a sqlite database:
 
     shed init news_agg -o projects -c sqlite:///news-lab.sqlite --env lab
 
-    # Use an the lab db file
+    # Create a revision for the lab environment
     shed revision news_agg.lab
 
-    # Use the development db for the project, remove the migrations
+    # Create a revision for the development database
+    # (automatically uses the 'news_agg' database, or any db named 'dev*' or '*dev')
     shed revision news_agg
 
 Emit raw sql using wrapped `alembic` command:
@@ -54,16 +55,16 @@ projects
 The command using a postgres dns will produce this config file: 
 
 ```yaml
-development:
-  db:
-    news_agg:
-      connection:
-        # Path relative to the config file
-        db_path: news_agg.sqlite
-      type: sqlite
 projects:
   news_agg:
     db:
+      # Development database (auto-created with sqlite)
+      news_agg:
+        connection:
+          # Path relative to the config file
+          db_path: news_agg.sqlite
+        type: sqlite
+      # Production database (from the --env lab option)
       lab:
         connection:
           database: db_name
@@ -77,6 +78,17 @@ projects:
 ```
 
 Then just define your `SQLModel` files as in [models.py](projects/news_agg/models.py).
+
+### Development Database Auto-Detection
+
+When you specify only a project name (e.g., `shed migrate news_agg`), shed automatically detects the development database by:
+
+1. First looking for a database with the same name as the project (e.g., `news_agg`)
+2. If not found, searching for databases matching `dev*` or `*dev` patterns
+3. Using that database if exactly one match is found
+4. Raising an error if no matches or multiple matches are found (asking you to specify the environment explicitly)
+
+This means you can quickly work with your development database without specifying the environment each time.
 
 ## Features
 

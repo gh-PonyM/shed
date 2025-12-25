@@ -14,18 +14,18 @@ from shed.settings import (
 
 def test_sqlite_config_valid():
     """Test valid SQLite configuration."""
-    config = DatabaseConfig(
-        type="sqlite", connection={"db_path": Path("/path/to/db.sqlite")}
-    )
-    assert config.type == "sqlite"
+    sqlite_conn = SqliteConnection(db_path=Path("/path/to/db.sqlite"))
+    config = DatabaseConfig(connection=sqlite_conn)
+    assert config.connection.type == "sqlite"
     assert isinstance(config.connection, SqliteConnection)
     assert isinstance(config.db_name, str)
 
 
 def test_pg_config_valid():
-    """Test valid SQLite configuration."""
-    config = DatabaseConfig(type="postgres", connection={})
-    assert config.type == "postgres"
+    """Test valid PostgreSQL configuration."""
+    pg_conn = PostgresConnection(schema_name=None)
+    config = DatabaseConfig(connection=pg_conn)
+    assert config.connection.type == "postgres"
     assert isinstance(config.connection, PostgresConnection)
     assert isinstance(config.db_name, str)
 
@@ -33,21 +33,7 @@ def test_pg_config_valid():
 def test_empty_settings_creation():
     """Test creating empty settings."""
     settings = Settings()
-    assert settings.development is not None
     assert settings.projects == {}
-
-    settings.development.add_connection(
-        "testproject", db_type="sqlite", dev_db_dir=Path()
-    )
-    assert (
-        settings.development.db["testproject"].connection.db_path
-        == Path("testproject.sqlite").absolute()
-    )
-
-    settings.development.add_connection(
-        "testproject", db_type="postgres", password="foobar"
-    )
-    assert settings.development.db["testproject"].connection.database == "postgres"
 
 
 def test_settings_path_handling(sample_settings_data, temp_settings_dir):
@@ -64,6 +50,7 @@ def test_settings_path_handling(sample_settings_data, temp_settings_dir):
     s = Settings.from_file(p)
     print(s.model_dump_json(indent=2))
 
+    assert s.settings_path is not None
     s_root = s.settings_path.parent
     pr_a = s.projects["projectA"]
     assert pr_a.module.is_absolute(), (

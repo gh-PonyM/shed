@@ -173,9 +173,11 @@ def clone(
     settings = ctx.obj["settings"]
     if not target:
         # use dev db
-        target_db_cfg = settings.development.db.get(src.project_name)
+        target_db_cfg = settings.get_dev_db(src.project_name)
         if not target_db_cfg:
-            error(f"No database found for project {src.project_name}")
+            error(
+                f"Could not determine development database for project '{src.project_name}'"
+            )
             raise typer.Exit(1)
     else:
         target_db_cfg = target.db_config
@@ -202,10 +204,17 @@ def revision(
             help="Auto-generate migration from model changes",
         ),
     ] = True,
+    use_ruff: Annotated[
+        bool,
+        typer.Option(
+            "--use-ruff/--no-use-ruff",
+            help="Format migration file with ruff if available",
+        ),
+    ] = True,
 ):
     """Create a new migration revision."""
     result = create_revision(
-        target.project_config, target.db_config, message, autogenerate
+        target.project_config, target.db_config, message, autogenerate, use_ruff
     )
 
     if result.success:
@@ -259,6 +268,18 @@ def export_json_schemas(
             schema = cls.model_json_schema(by_alias=by_alias, mode="serialization")
             schema_str = json.dumps(schema, indent=indent)
             (output_dir / fn).write_text(schema_str)
+
+
+@app.command()
+def config_schema(pretty: bool = True):
+    """Prints the config jsonschema"""
+    s = Settings.model_json_schema()
+    if pretty:
+        from rich import print_json
+
+        print_json(data=s)
+    else:
+        typer.secho(json.dumps(s))
 
 
 if __name__ == "__main__":
