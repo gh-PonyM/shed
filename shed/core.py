@@ -13,6 +13,7 @@ import shutil
 import typer
 from pydantic import BaseModel
 from sqlmodel import SQLModel
+from jinja2 import Environment, FileSystemLoader
 
 from .constants import PROG_NAME
 from .settings import (
@@ -77,6 +78,58 @@ def module_path_root(module: str):
 templates_path = module_path_root(PROG_NAME) / "templates"
 
 
+def extract_templates(
+    project_config: ProjectConfig,
+    project_name: str,
+    settings: Settings,
+) -> None:
+    """Extract and render alembic templates to migrations directory.
+
+    This creates standalone alembic configuration files that can be used
+    with the raw alembic command instead of shed commands.
+    """
+    migrations_dir = project_config.migrations_dir
+
+    # Setup Jinja2 environment
+    jinja_env = Environment(loader=FileSystemLoader(templates_path))
+
+    # Get the first database config as default (preferably dev db)
+    dev_db = settings.get_dev_db(project_name)
+    default_db_url = dev_db.connection.get_dsn if dev_db else "sqlite:///:memory:"
+
+    # Render env.py
+    env_template = jinja_env.get_template("env.py")
+    env_content = env_template.render(
+        models_path=project_config.module,
+        models_import_path=project_config.module.stem,
+    )
+    env_py_path = migrations_dir / "env.py"
+    env_py_path.write_text(env_content)
+
+    # Render alembic.ini with multi-project support
+    alembic_ini_template = jinja_env.get_template("alembic_multi.ini")
+
+    # Make paths relative to the migrations directory parent
+    migrations_parent = migrations_dir.parent
+    script_dir_rel = migrations_dir.relative_to(migrations_parent)
+    versions_dir_rel = project_config.versions_dir.relative_to(migrations_parent)
+
+    alembic_ini_content = alembic_ini_template.render(
+        project_name=project_name,
+        script_dir=str(script_dir_rel),
+        versions_dir=str(versions_dir_rel),
+        default_db_url=default_db_url,
+        db_configs=project_config.db,
+    )
+    alembic_ini_path = migrations_parent / "alembic.ini"
+    alembic_ini_path.write_text(alembic_ini_content)
+
+    # Copy script.py.mako template
+    script_template_src = templates_path / "script.py.mako"
+    script_template_dst = migrations_dir / "script.py.mako"
+    shutil.copy2(script_template_src, script_template_dst)
+
+
 def init_project(
     settings: Settings,
     project_name: str,
@@ -85,8 +138,20 @@ def init_project(
     db_config: DatabaseConfig | None = None,
     env_name: str = "prod",
     dev_db_type: Literal["sqlite", "postgres"] = "sqlite",
+    extract: bool = False,
 ) -> InitResult:
-    """Initialize migration folder for a project, creating project config if needed."""
+    """Initialize migration folder for a project, creating project config if needed.
+
+    Args:
+        settings: Settings object
+        project_name: Name of the project
+        force: Overwrite existing files
+        output_dir: Output directory for project files
+        db_config: Optional database configuration for production environment
+        env_name: Name of the production environment
+        dev_db_type: Database type for development environment
+        extract: If True, extract alembic templates to migrations directory for standalone use
+    """
     config_created = False
 
     # Check if project exists, if not create it, use relative paths to the settings
@@ -140,15 +205,40 @@ def init_project(
     dev_db = project_config.db[dev_env_name].db_name
 
     message_parts = []
+
     if config_created:
         message_parts.append(f"Config created in {settings.settings_path}")
+
     message_parts.append(
         f"Migration folder initialized at {migrations_dir} and development db '{dev_db}' added"
     )
+
     if db_config:
         message_parts.append("Added prod db for project")
+
     if not models_path.is_file():
         models_path.write_text("# Put your SQLModels in here\n\n")
+
+    # Extract templates if requested
+    if extract:
+        extract_templates(project_config, project_name, settings)
+        schema_support = any(
+            db.connection.schema_name for db in project_config.db.values()
+        )
+        message_parts.append(
+            f"""
+Templates extracted to migrations directory.
+You can now use raw alembic commands:
+  cd {project_dir}
+  alembic --name {project_name} revision -m 'message' --autogenerate
+  alembic --name {project_name} upgrade head"""
+            + (
+                f"""
+For schema/tenant support, use: alembic --name {project_name} -x tenant=schema_name ..."""
+                if schema_support
+                else ""
+            )
+        )
 
     return InitResult(
         success=True,

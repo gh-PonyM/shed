@@ -6,6 +6,7 @@ import sys
 import os
 from pathlib import Path
 import logging
+from functools import lru_cache
 
 # Add the project module to Python path
 sys.path.insert(0, str(Path("{{ models_path }}").parent))
@@ -30,7 +31,22 @@ def get_dsn_from_env():
     return dsn
 
 
+@lru_cache(maxsize=1)
 def get_tenant() -> str | None:
+    """Get tenant/schema from -x tenant argument or SHED_CURRENT_SCHEMA env var.
+    
+    When templates are extracted, use: alembic -x tenant=some_schema revision -m "rev1" --autogenerate
+    When using shed commands, the SHED_CURRENT_SCHEMA env var is used.
+    """
+    # Try -x argument first (for extracted/standalone alembic usage)
+    tenant = context.get_x_argument(as_dictionary=True).get("tenant")
+    if tenant:
+        m = re.match(r"^[a-z_]+$", tenant)
+        if not m:
+            raise ValueError(f"tenant is not valid: {tenant}")
+        return m.group(0)
+    
+    # Fall back to environment variable (for shed command usage)
     schema = os.getenv("SHED_CURRENT_SCHEMA", "")
     if schema:
         m = re.match(r"^[a-z_]+$", schema)

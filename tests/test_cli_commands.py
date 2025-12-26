@@ -289,3 +289,76 @@ def test_revision_command_relative_paths(
     # Migrate
     r = temp_dir_runner.invoke(app, ["migrate", project_name])
     assert r.exit_code == 0
+
+
+def test_init_command_with_extract(runner, cli_settings_path, temp_settings_dir):
+    """Test init command with --extract flag to render templates."""
+    project_name = "extract_test"
+
+    # Initialize with extract flag
+    result = runner.invoke(
+        app, ["init", project_name, "--output", str(temp_settings_dir), "--extract"]
+    )
+
+    assert result.exit_code == 0
+    assert "Migration folder initialized" in result.stdout
+    assert "Templates extracted to migrations directory" in result.stdout
+    assert "You can now use raw alembic commands" in result.stdout
+
+    # Verify files were created
+    project_dir = temp_settings_dir / project_name
+    migrations_dir = project_dir / "migrations"
+
+    # Check that templates were extracted
+    assert (migrations_dir / "env.py").exists()
+    assert (migrations_dir / "script.py.mako").exists()
+    assert (project_dir / "alembic.ini").exists()
+
+    # Verify env.py content - should have tenant support from -x argument
+    env_py_content = (migrations_dir / "env.py").read_text()
+    assert "context.get_x_argument" in env_py_content
+    assert "tenant" in env_py_content
+
+    # Verify alembic.ini has the project section
+    alembic_ini_content = (project_dir / "alembic.ini").read_text()
+    assert f"[{project_name}]" in alembic_ini_content
+    assert "script_location" in alembic_ini_content
+
+
+def test_revision_command_with_extract(runner, cli_settings_path, temp_settings_dir):
+    """Test revision command with --extract flag."""
+    from pathlib import Path
+    import shutil
+
+    tests_dir = Path(__file__).parent
+    project_name = "revision_extract_test"
+    source_models_path = (
+        tests_dir / "fixtures" / "projects" / "pg_schemas" / "models.py"
+    )
+    project_dir = temp_settings_dir / project_name
+    project_dir.mkdir()
+    target_models_path = project_dir / "models.py"
+
+    # Copy the test models.py to the temp directory
+    shutil.copy2(source_models_path, target_models_path)
+
+    # First, initialize a project without extract
+    result = runner.invoke(
+        app, ["init", project_name, "--output", str(temp_settings_dir)]
+    )
+    assert result.exit_code == 0
+
+    # Create a revision with extract flag
+    result = runner.invoke(
+        app, ["revision", project_name, "--message", "Test migration", "--extract"]
+    )
+
+    assert result.exit_code == 0
+    assert "Created revision: Test migration" in result.stdout
+    assert "Templates extracted to migrations directory" in result.stdout
+
+    # Verify templates were extracted
+    migrations_dir = project_dir / "migrations"
+    assert (migrations_dir / "env.py").exists()
+    assert (migrations_dir / "script.py.mako").exists()
+    assert (project_dir / "alembic.ini").exists()

@@ -204,7 +204,7 @@ class ProjectHelper:
         for sql in (
             f'DROP DATABASE IF EXISTS "{self.current_db_conn.database}"',
             f'CREATE DATABASE "{self.current_db_conn.database}"',
-            "DROP TABLE IF EXISTS public.alembic_version"
+            "DROP TABLE IF EXISTS public.alembic_version",
         ):
             self._run_sql_with_autocommit(
                 sql,

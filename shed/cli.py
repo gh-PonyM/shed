@@ -102,6 +102,13 @@ def init(
     dev_db_type: Annotated[
         CliDBType, typer.Option(help="Database used local development")
     ] = CliDBType.sqlite,
+    extract: Annotated[
+        bool,
+        typer.Option(
+            "--extract",
+            help="Extract alembic templates to migrations directory for standalone use with raw alembic commands",
+        ),
+    ] = False,
 ):
     """Initialize migration folder for a project."""
     settings: Settings = ctx.obj["settings"]
@@ -117,6 +124,7 @@ def init(
         connection.value if connection else None,
         env,
         dev_db_type=dev_db_type.value,
+        extract=extract,
     )
 
     if result.success:
@@ -193,6 +201,7 @@ def clone(
 
 @app.command()
 def revision(
+    ctx: typer.Context,
     target: ProjectEnv,
     message: Annotated[
         str, typer.Option("--message", "-m", help="Revision message")
@@ -211,6 +220,13 @@ def revision(
             help="Format migration file with ruff if available",
         ),
     ] = True,
+    extract: Annotated[
+        bool,
+        typer.Option(
+            "--extract",
+            help="Extract alembic templates to migrations directory for standalone use with raw alembic commands",
+        ),
+    ] = False,
 ):
     """Create a new migration revision."""
     result = create_revision(
@@ -221,6 +237,34 @@ def revision(
         success(result.message)
         if result.revision_file:
             typer.secho(f"Revision file: {result.revision_file}", fg=typer.colors.BLUE)
+
+        # Extract templates if requested
+        if extract:
+            from .core import extract_templates
+
+            settings: Settings = ctx.obj["settings"]
+            extract_templates(target.project_config, target.project_name, settings)
+            typer.secho(
+                "\nTemplates extracted to migrations directory.", fg=typer.colors.GREEN
+            )
+            typer.secho("You can now use raw alembic commands:", fg=typer.colors.BLUE)
+            project_dir = target.project_config.migrations_dir.parent
+            typer.secho(f"  cd {project_dir}", fg=typer.colors.BLUE)
+            typer.secho(
+                f"  alembic --name {target.project_name} revision -m 'message' --autogenerate",
+                fg=typer.colors.BLUE,
+            )
+            typer.secho(
+                f"  alembic --name {target.project_name} upgrade head",
+                fg=typer.colors.BLUE,
+            )
+            if any(
+                db.connection.schema_name for db in target.project_config.db.values()
+            ):
+                typer.secho(
+                    f"For schema/tenant support, use: alembic --name {target.project_name} -x tenant=schema_name ...",
+                    fg=typer.colors.BLUE,
+                )
     else:
         error(result.message)
         raise typer.Exit(1)
