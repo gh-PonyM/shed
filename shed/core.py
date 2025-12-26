@@ -77,6 +77,18 @@ def module_path_root(module: str):
 
 templates_path = module_path_root(PROG_NAME) / "templates"
 
+def prepare_jinja_context_alembic_ini(
+    project_config: ProjectConfig,
+    project_name: str,
+    settings: Settings,
+):
+    """Converts a project config to the context passed to jinja."""
+    # script_location = {{script_dir}}
+    # prepend_sys_path =.
+    # version_path_separator = os
+    # sqlalchemy.url = sqlite: // /:memory:
+    # version_locations = {{versions_dir}}
+    pass
 
 def extract_templates(
     project_config: ProjectConfig,
@@ -97,10 +109,17 @@ def extract_templates(
     dev_db = settings.get_dev_db(project_name)
     default_db_url = dev_db.connection.get_dsn if dev_db else "sqlite:///:memory:"
 
-    # Render env.py
+    # Make paths relative to the migrations directory parent (project dir)
+    alembic_cwd = migrations_dir.parent
+    alembic_ini_path = alembic_cwd / "alembic.ini"
+
+    script_dir_rel = migrations_dir.relative_to(alembic_cwd)
+    versions_dir_rel = project_config.versions_dir.relative_to(alembic_cwd)
+
+    # Render env.py with relative models path
     env_template = jinja_env.get_template("env.py")
     env_content = env_template.render(
-        models_path=project_config.module,
+        models_path=str(project_config.module.relative_to(alembic_cwd)),
         models_import_path=project_config.module.stem,
     )
     env_py_path = migrations_dir / "env.py"
@@ -108,20 +127,15 @@ def extract_templates(
 
     # Render alembic.ini with multi-project support
     alembic_ini_template = jinja_env.get_template("alembic_multi.ini")
-
-    # Make paths relative to the migrations directory parent
-    migrations_parent = migrations_dir.parent
-    script_dir_rel = migrations_dir.relative_to(migrations_parent)
-    versions_dir_rel = project_config.versions_dir.relative_to(migrations_parent)
-
+    # TODO: another object must be passed containing multiple sections, each containing all the info for a section
+    # use output of
     alembic_ini_content = alembic_ini_template.render(
         project_name=project_name,
         script_dir=str(script_dir_rel),
         versions_dir=str(versions_dir_rel),
         default_db_url=default_db_url,
-        db_configs=project_config.db,
+        sections=prepare_jinja_context_alembic_ini(project_config, project_name, settings),
     )
-    alembic_ini_path = migrations_parent / "alembic.ini"
     alembic_ini_path.write_text(alembic_ini_content)
 
     # Copy script.py.mako template
