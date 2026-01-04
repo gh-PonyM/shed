@@ -21,6 +21,14 @@ Using pipx:
 
     pipx install git+https://github.com/gh-PonyM/shed.git#main
 
+## Features
+
+- Clone databases from prod to dev
+- Running short-commands for alembic like `revision` or `migrate`
+- Alembic command wrapper that takes your project and passes the db information to alembic
+- Exporting jsonschemas for your models (see [schemas](schemas/news_agg.ScrapeResult.json))
+- Export alembic templates used by the tool with `shed revision --extract`
+
 ## Usage
 
 Create a new project inside the projects folder:
@@ -89,13 +97,6 @@ When you specify only a project name (e.g., `shed migrate news_agg`), shed autom
 4. Raising an error if no matches or multiple matches are found (asking you to specify the environment explicitly)
 
 This means you can quickly work with your development database without specifying the environment each time.
-
-## Features
-
-- Clone databases from prod to dev
-- Running short-commands for alembic like `revision` or `migrate`
-- Alembic command wrapper that takes your project and passes the db information to alembic
-- Exporting jsonschemas for your models (see [schemas](schemas/news_agg.ScrapeResult.json))
 
 ## How it works under the hood
 
